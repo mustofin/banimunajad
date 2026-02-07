@@ -1,0 +1,353 @@
+<!DOCTYPE html>
+<html lang="id">
+
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Silsilah Keluarga - Bani Munajad</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script src="https://unpkg.com/lucide@latest"></script>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        * {
+            font-family: 'Inter', sans-serif;
+        }
+
+        .node circle {
+            stroke: #22c55e;
+            stroke-width: 3px;
+            transition: all 0.3s ease;
+        }
+
+        .node:hover circle {
+            stroke: #3b82f6;
+            stroke-width: 4px;
+            filter: drop-shadow(0 4px 12px rgba(59, 130, 246, 0.4));
+        }
+
+        .node text {
+            font-size: 12px;
+            font-weight: 500;
+        }
+
+        .node .name-label {
+            font-size: 13px;
+            font-weight: 600;
+            fill: #1f2937;
+        }
+
+        .node .year-label {
+            font-size: 10px;
+            fill: #6b7280;
+        }
+
+        .link {
+            fill: none;
+            stroke: #cbd5e1;
+            stroke-width: 2px;
+        }
+
+        .link.spouse {
+            stroke: #ec4899;
+            stroke-width: 2px;
+            stroke-dasharray: 5, 5;
+        }
+
+        .node.deceased circle {
+            stroke: #9ca3af;
+        }
+
+        .node.deceased .name-label {
+            fill: #6b7280;
+        }
+
+        .search-highlight circle {
+            stroke: #f59e0b !important;
+            stroke-width: 5px !important;
+            animation: pulse 2s infinite;
+        }
+
+        @keyframes pulse {
+
+            0%,
+            100% {
+                transform: scale(1);
+            }
+
+            50% {
+                transform: scale(1.1);
+            }
+        }
+
+        #tree-container {
+            cursor: grab;
+        }
+
+        #tree-container:active {
+            cursor: grabbing;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar {
+            width: 8px;
+            height: 8px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-track {
+            background: #f1f5f9;
+            border-radius: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb {
+            background: #cbd5e1;
+            border-radius: 4px;
+        }
+
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover {
+            background: #94a3b8;
+        }
+
+        .glass-panel {
+            background: rgba(255, 255, 255, 0.95);
+            backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.2);
+        }
+
+        .spouse-connector {
+            fill: none;
+            stroke: #ec4899;
+            stroke-width: 2px;
+        }
+    </style>
+</head>
+
+<body class="bg-gradient-to-br from-slate-50 to-blue-50 min-h-screen">
+    <!-- Header -->
+    <header class="glass-panel fixed top-0 left-0 right-0 z-50 shadow-sm">
+        <div class="max-w-7xl mx-auto px-4 py-3">
+            <div class="flex items-center justify-between flex-wrap gap-3">
+                <!-- Logo -->
+                <div class="flex items-center gap-3">
+                    <div
+                        class="w-10 h-10 bg-gradient-to-br from-blue-500 to-indigo-600 rounded-xl flex items-center justify-center shadow-lg">
+                        <i data-lucide="git-branch" class="w-5 h-5 text-white"></i>
+                    </div>
+                    <div>
+                        <h1 class="text-lg font-bold text-gray-800">Silsilah Keluarga</h1>
+                        <p class="text-xs text-gray-500">Bani Munajad</p>
+                    </div>
+                </div>
+
+                <!-- Search -->
+                <div class="flex-1 max-w-md">
+                    <div class="relative">
+                        <i data-lucide="search"
+                            class="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-gray-400"></i>
+                        <input type="text" id="searchInput" placeholder="Cari nama anggota keluarga..."
+                            class="w-full pl-10 pr-4 py-2.5 bg-gray-50 border border-gray-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all">
+                        <button id="searchBtn"
+                            class="absolute right-2 top-1/2 -translate-y-1/2 p-1.5 bg-blue-500 text-white rounded-lg hover:bg-blue-600 transition-colors">
+                            <i data-lucide="arrow-right" class="w-4 h-4"></i>
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Controls -->
+                <div class="flex items-center gap-2">
+                    <!-- Toggle Spouse -->
+                    <label
+                        class="flex items-center gap-2 px-3 py-2 bg-gray-50 rounded-xl cursor-pointer hover:bg-gray-100 transition-colors">
+                        <input type="checkbox" id="showSpouse"
+                            class="w-4 h-4 text-blue-500 rounded focus:ring-blue-500">
+                        <span class="text-sm text-gray-700">Tampilkan Pasangan</span>
+                        <i data-lucide="heart" class="w-4 h-4 text-pink-500"></i>
+                    </label>
+
+                    <!-- Refresh -->
+                    <button id="refreshBtn" class="p-2.5 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors"
+                        title="Refresh Data">
+                        <i data-lucide="refresh-cw" class="w-5 h-5 text-gray-600"></i>
+                    </button>
+
+                    <!-- Reset View -->
+                    <button id="resetBtn" class="p-2.5 bg-gray-50 hover:bg-gray-100 rounded-xl transition-colors"
+                        title="Reset Tampilan">
+                        <i data-lucide="maximize" class="w-5 h-5 text-gray-600"></i>
+                    </button>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Legend -->
+    <div class="fixed top-20 left-4 z-40 glass-panel rounded-xl p-4 shadow-lg max-w-xs">
+        <h3 class="text-sm font-semibold text-gray-700 mb-3 flex items-center gap-2">
+            <i data-lucide="info" class="w-4 h-4"></i>
+            Keterangan
+        </h3>
+        <div class="space-y-2 text-xs">
+            <div class="flex items-center gap-2">
+                <div class="w-3 h-3 rounded-full bg-green-500"></div>
+                <span class="text-gray-600">Masih Hidup</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="w-3 h-3 rounded-full bg-gray-400"></div>
+                <span class="text-gray-600">Alm/Almh (Wafat)</span>
+            </div>
+            <div class="flex items-center gap-2">
+                <div class="w-8 h-0.5 bg-pink-500 border-dashed" style="border-top: 2px dashed #ec4899;"></div>
+                <span class="text-gray-600">Hubungan Pasangan</span>
+            </div>
+        </div>
+        <div class="mt-3 pt-3 border-t border-gray-200">
+            <p class="text-xs text-gray-500">
+                <i data-lucide="mouse" class="w-3 h-3 inline"></i>
+                Scroll untuk zoom, drag untuk geser
+            </p>
+        </div>
+    </div>
+
+    <!-- Main Tree Container -->
+    <div id="tree-container" class="w-full h-screen pt-20 overflow-hidden"></div>
+
+    <!-- Loading Overlay -->
+    <div id="loadingOverlay" class="fixed inset-0 bg-white/90 backdrop-blur-sm z-50 flex items-center justify-center">
+        <div class="text-center">
+            <div class="w-16 h-16 border-4 border-blue-200 border-t-blue-500 rounded-full animate-spin mx-auto mb-4">
+            </div>
+            <p class="text-gray-600 font-medium">Memuat data silsilah...</p>
+        </div>
+    </div>
+
+    <!-- Member Detail Modal -->
+    <div id="detailModal"
+        class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-md w-full max-h-[90vh] overflow-y-auto custom-scrollbar transform transition-all scale-95 opacity-0"
+            id="modalContent">
+            <div class="relative">
+                <!-- Header with gradient -->
+                <div class="h-32 bg-gradient-to-br from-blue-500 to-indigo-600 relative">
+                    <button id="closeModal"
+                        class="absolute top-4 right-4 p-2 bg-white/20 hover:bg-white/30 rounded-xl text-white transition-colors">
+                        <i data-lucide="x" class="w-5 h-5"></i>
+                    </button>
+                </div>
+
+                <!-- Profile Image -->
+                <div class="absolute -bottom-12 left-1/2 -translate-x-1/2">
+                    <div class="w-24 h-24 rounded-2xl border-4 border-white shadow-lg overflow-hidden bg-gray-100">
+                        <img id="modalPhoto" src="" alt="" class="w-full h-full object-cover">
+                    </div>
+                </div>
+            </div>
+
+            <div class="pt-16 pb-6 px-6">
+                <!-- Name & Status -->
+                <div class="text-center mb-4">
+                    <h2 id="modalName" class="text-xl font-bold text-gray-800"></h2>
+                    <p id="modalStatus" class="text-sm mt-1"></p>
+                </div>
+
+                <!-- Info Grid -->
+                <div class="grid grid-cols-2 gap-3 mb-4">
+                    <div class="bg-gray-50 p-3 rounded-xl">
+                        <p class="text-xs text-gray-500 mb-1">Jenis Kelamin</p>
+                        <p id="modalGender" class="text-sm font-medium text-gray-700 flex items-center gap-1">
+                            <i data-lucide="user" class="w-4 h-4"></i>
+                            <span></span>
+                        </p>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-xl">
+                        <p class="text-xs text-gray-500 mb-1">Orang Tua</p>
+                        <p id="modalParent" class="text-sm font-medium text-gray-700"></p>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-xl">
+                        <p class="text-xs text-gray-500 mb-1">Tempat Lahir</p>
+                        <p id="modalBirthPlace" class="text-sm font-medium text-gray-700"></p>
+                    </div>
+                    <div class="bg-gray-50 p-3 rounded-xl">
+                        <p class="text-xs text-gray-500 mb-1">Tahun Lahir</p>
+                        <p id="modalBirthYear" class="text-sm font-medium text-gray-700"></p>
+                    </div>
+                </div>
+
+                <!-- Death Info (if applicable) -->
+                <div id="modalDeathInfo" class="hidden bg-gray-100 p-4 rounded-xl mb-4">
+                    <p class="text-xs text-gray-500 mb-1">Wafat</p>
+                    <p id="modalDeathDetails" class="text-sm font-medium text-gray-700"></p>
+                </div>
+
+                <!-- Address & Contact -->
+                <div class="space-y-3 mb-4">
+                    <div class="flex items-start gap-3">
+                        <i data-lucide="map-pin" class="w-4 h-4 text-gray-400 mt-0.5"></i>
+                        <div>
+                            <p class="text-xs text-gray-500">Alamat</p>
+                            <p id="modalAddress" class="text-sm text-gray-700"></p>
+                        </div>
+                    </div>
+                    <div class="flex items-start gap-3">
+                        <i data-lucide="phone" class="w-4 h-4 text-gray-400 mt-0.5"></i>
+                        <div>
+                            <p class="text-xs text-gray-500">No. HP</p>
+                            <p id="modalPhone" class="text-sm text-gray-700"></p>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Bio -->
+                <div class="bg-blue-50 p-4 rounded-xl">
+                    <p class="text-xs text-blue-600 font-medium mb-1">Biografi</p>
+                    <p id="modalBio" class="text-sm text-gray-700 leading-relaxed"></p>
+                </div>
+
+                <!-- Spouse Info -->
+                <div id="modalSpouse" class="hidden mt-4 pt-4 border-t border-gray-200">
+                    <p class="text-xs text-gray-500 mb-2">Pasangan</p>
+                    <div class="flex items-center gap-3">
+                        <div class="w-12 h-12 rounded-xl overflow-hidden bg-gray-100">
+                            <img id="modalSpousePhoto" src="" alt="" class="w-full h-full object-cover">
+                        </div>
+                        <div>
+                            <p id="modalSpouseName" class="text-sm font-medium text-gray-700"></p>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Not Found Dialog -->
+    <div id="notFoundDialog"
+        class="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 hidden items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-sm w-full p-6 text-center transform transition-all scale-95 opacity-0"
+            id="notFoundContent">
+            <div class="w-16 h-16 bg-orange-100 rounded-full flex items-center justify-center mx-auto mb-4">
+                <i data-lucide="search-x" class="w-8 h-8 text-orange-500"></i>
+            </div>
+            <h3 class="text-lg font-bold text-gray-800 mb-2">Anggota Tidak Ditemukan</h3>
+            <p class="text-sm text-gray-600 mb-4">Nama "<span id="notFoundName" class="font-medium"></span>" tidak
+                ditemukan dalam silsilah keluarga.</p>
+            <button id="closeNotFound"
+                class="w-full py-2.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-xl font-medium transition-colors">
+                Tutup
+            </button>
+        </div>
+    </div>
+
+    <!-- Toast Notification -->
+    <div id="toast" class="fixed bottom-4 right-4 z-50 transform translate-y-20 opacity-0 transition-all duration-300">
+        <div class="bg-gray-800 text-white px-4 py-3 rounded-xl shadow-lg flex items-center gap-3">
+            <i data-lucide="check-circle" class="w-5 h-5 text-green-400"></i>
+            <span id="toastMessage" class="text-sm">Data berhasil dimuat</span>
+        </div>
+    </div>
+
+    <script src="script.js"></script>
+    <script>
+        lucide.createIcons();
+    </script>
+
+</body>
+
+</html>
